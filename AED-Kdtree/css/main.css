@@ -43,3 +43,38 @@ canvas {
   border: 1px solid #555;
   border-radius: 4px;
 }
+
+
+#speed-control {
+  margin-top: 10px;
+  padding: 10px;
+  background: #2a2a2a;
+  border-radius: 8px;
+  box-shadow: 0 0 4px #111;
+  text-align: center;
+  color: #9fe89a;
+  font-weight: bold;
+}
+
+#speedSlider {
+  width: 180px;
+  accent-color: #4caf50;
+  background: transparent;
+}
+
+
+
+
+#log{
+  width:900px;
+  max-height:120px;
+  overflow-y:auto;
+  margin-top:8px;
+  padding:6px 10px;
+  background:#2b2b2b;
+  color:#e1e1e1;
+  font:13px/1.4 "Segoe UI",sans-serif;
+  border-radius:4px;
+  border:1px solid #555;
+}
+#log p{ margin:0; }

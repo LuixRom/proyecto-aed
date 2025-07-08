@@ -13,9 +13,22 @@
     <button id="insert">Insert</button>
     <button id="delete">Delete</button>
     <button id="reset" style="margin-left: 8px;">Reset</button>
+    <button id="undo" style="margin-left:8px;">Undo</button>
+    
   </div>
 
+
+  <div id="speed-control">
+  <!-- izquierda = 1500 ms (lento) ··· derecha = 100 ms (rápido) -->
+   <input type="range"
+         id="speedSlider"
+         min="100" max="1500" step="100" value="1200">
+    <div>Velocidad de Animación</div>
+  </div>
+
+
   <canvas id="board" width="900" height="500"></canvas>
+  <div id="log"></div>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

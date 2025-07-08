@@ -21,94 +21,115 @@ import KDNode from "./KDNode.js";
 export class KDTree {
   constructor(){ this.root = null; }
 
-  /* ───────────── Inserción animada ───────────── */
-    async insert(point){
-      const pendingId = KDNode._nextId;
-  
-      /* separador + inicio */
-      enqueue({ action:"log", msg:"────────────" });
-      enqueue({ action:"log",
-                msg:`Insertando punto (${point[0]}, ${point[1]})` });
-  
-      enqueue({ action:"createPendingNode", point, id:pendingId });
-  
-      /* insertar en estructura */
-      this.root = await this._insert(this.root, point, 0, null);
-  
-      /* layout inicial */
-      enqueue({ action:"reLayout" });
-  
-      /* esperar coordenadas del nuevo nodo */
-      let layoutNode=null;
-      for(let i=0;i<50;i++){
-        layoutNode = this._findById(this.root, pendingId);
-        if(layoutNode && layoutNode._finalX !== undefined) break;
-        await new Promise(r=>setTimeout(r,20));
-      }
-      const { _finalX:finalX, _finalY:finalY } = layoutNode;
-  
-      /* arista dinámica (si no es raíz) */
-      if(layoutNode.parentId!==null)
-        enqueue({ action:"attachDynamicEdge", fromId:layoutNode.parentId });
-  
-      /* animación */
-      const steps=20;
-      for(let i=0;i<=steps;i++){
-        const t=i/steps;
-        const x = 50  + (finalX-50)  * t;
-        const y = 250 + (finalY-250) * t;
-        enqueue({ action:"movePendingNode", x, y });
-        if(layoutNode.parentId!==null)
-          enqueue({ action:"updateDynamicEdgeTo", x, y });
-        await new Promise(r=>setTimeout(r,getAnimationSpeed()/steps));
-      }
-  
-      /* integrar y layout final */
-      enqueue({ action:"finalizePendingNode" });
-      setTimeout(()=>enqueue({ action:"reLayout" }),200);
-    }
-  
-    /* ───── inserción recursiva con mensajes ───── */
-    async _insert(node, point, depth, parentId){
-      /* caso hoja: crear nuevo nodo */
-      if(!node){
-        enqueue({ action:"log",
-                  msg:`  └─ Subárbol vacío → se crea nodo (${point[0]}, ${point[1]})`});
-        const n = new KDNode(point, depth);
-        n.parentId = parentId;
-        return n;
-      }
-  
-      const axis = depth % 2;         // 0 = x, 1 = y
-      const coord = axis===0 ? "x" : "y";
-  
-      /* comparar */
-      enqueue({ action:"setVisitedNode", id:node.id });
-      enqueue({ action:"highlightNode",  id:node.id, axis });
-      enqueue({ action:"setPendingAxis", axis });
-      enqueue({ action:"log",
-                msg:`  • Comparando ${coord}: ${point[axis]} con ${node.point[axis]}`});
-  
-      await new Promise(r=>setTimeout(r,getAnimationSpeed()));
-  
-      enqueue({ action:"unhighlightNode", id:node.id });
-      enqueue({ action:"setVisitedNode", id:null });
-      enqueue({ action:"clearPendingAxis" });
-  
-      /* decidir rama + mensaje */
-      if(point[axis] < node.point[axis]){
-        enqueue({ action:"log",
-                  msg:`    ↳ ${point[axis]} < ${node.point[axis]} → bajar IZQUIERDA`});
-        node.left  = await this._insert(node.left, point, depth+1, node.id);
-      }else{
-        enqueue({ action:"log",
-                  msg:`    ↳ ${point[axis]} ≥ ${node.point[axis]} → bajar DERECHA`});
-        node.right = await this._insert(node.right, point, depth+1, node.id);
-      }
-      return node;
-    }
 
-  
+
+  /* ═══════════════════════ INSERCIÓN COMPLETA ═══════════════════════ */
+async insert(pt){
+  /* 0 · normaliza entrada y verifica formato ------------------------- */
+  if (!Array.isArray(pt) || pt.length !== 2){
+    enqueue({action:"log", msg:"• Formato de punto incorrecto"}); return;
+  }
+  const P = pt.map(Number);
+
+  /* 1 · duplicado global con super-key -------------------------------- */
+  if (this._existeSuperKey(this.root, P)){
+    enqueue({action:"log", msg:"• Punto duplicado — inserción ignorada"});
+    enqueue({action:"discardPendingNode"});
+    return;
+  }
+
+  /* 2 · crea nodo “pendiente” azul ----------------------------------- */
+  const pendingId = KDNode._nextId;
+  enqueue({action:"log", msg:"────────────"});
+  enqueue({action:"log", msg:`Insertando punto (${P})`});
+  enqueue({action:"createPendingNode", point:P, id:pendingId});
+
+  /* 3 · inserción recursiva con super-key ---------------------------- */
+  this.root = await this._insert(this.root, P, 0, null);
+  enqueue({action:"reLayout"});
+
+  /* 4 · anima la “caída” del nodo azul ------------------------------- */
+  let n=null;
+  for(let i=0;i<50;i++){
+    n = this._findById(this.root, pendingId);
+    if(n && n._finalX !== undefined) break;
+    await new Promise(r=>setTimeout(r,20));
+  }
+  const { _finalX:fx, _finalY:fy } = n;
+  if(n.parentId!==null) enqueue({action:"attachDynamicEdge", fromId:n.parentId});
+
+  const S=20;
+  for(let i=0;i<=S;i++){
+    const t=i/S, x=50+(fx-50)*t, y=250+(fy-250)*t;
+    enqueue({action:"movePendingNode", x, y});
+    if(n.parentId!==null) enqueue({action:"updateDynamicEdgeTo", x, y});
+    await new Promise(r=>setTimeout(r,getAnimationSpeed()/S));
+  }
+  enqueue({action:"finalizePendingNode"});
+  setTimeout(()=>enqueue({action:"reLayout"}),200);
+}
+
+/* ───── inserción recursiva **con super-key** en cada nivel ───── */
+async _insert(node, pt, depth, parentId){
+  if(!node){
+    enqueue({action:"log", msg:`  └─ Subárbol vacío → se crea nodo (${pt})`});
+    const n = new KDNode(pt, depth); n.parentId = parentId; return n;
+  }
+
+  /* 1 · compara super-key Sⱼ ---------------------------------------- */
+  const j   = depth & 1;                       // eje discriminante
+  const cmp = this._cmpSuperKey(pt, node.point, j);
+
+  /* 2 · animación de comparación (muestra sólo eje j) --------------- */
+  enqueue({action:"setVisitedNode", id:node.id});
+  enqueue({action:"highlightNode" , id:node.id, axis:j});
+  enqueue({action:"setPendingAxis", axis:j});
+  enqueue({action:"log",
+           msg:`  • Comparando eje ${j?'y':'x'}: ${pt[j]} con ${node.point[j]}`});
+  await new Promise(r=>setTimeout(r,getAnimationSpeed()));
+  enqueue({action:"unhighlightNode", id:node.id});
+  enqueue({action:"setVisitedNode",  id:null});
+  enqueue({action:"clearPendingAxis"});
+
+  /* 3 · decisión según cmp ------------------------------------------ */
+  if (cmp === 0){                               // duplicado exacto
+    enqueue({action:"log", msg:"• Punto duplicado — inserción ignorada"});
+    enqueue({action:"discardPendingNode"});
+    return node;
+  }
+  if (cmp < 0){
+    enqueue({action:"log", msg:"    ↳ SUCCESSOR = LOSON → IZQUIERDA"});
+    node.left  = await this._insert(node.left,  pt, depth+1, node.id);
+  }else{
+    enqueue({action:"log", msg:"    ↳ SUCCESSOR = HISON → DERECHA"});
+    node.right = await this._insert(node.right, pt, depth+1, node.id);
+  }
+  return node;
+}
+
+/* ───── detección de duplicados con super-key ------------------------ */
+_existeSuperKey(n, P){
+  while(n){
+    const cmp = this._cmpSuperKey(P, n.point, n.depth & 1);
+    if (cmp === 0) return true;
+    n = (cmp < 0) ? n.left : n.right;
+  }
+  return false;
+}
+
+/* ───── comparación de super-keys Sⱼ(A) vs Sⱼ(B)  (-1 / 0 / 1) ------ */
+_cmpSuperKey(A, B, j){
+  /* igualdad total ➜ 0 */
+  if (A[0] === B[0] && A[1] === B[1]) return 0;
+
+  /* (k = 2)  ⇒  Sⱼ = Kⱼ Kⱼ₊₁  (cíclico) */
+  for (let k=0;k<2;k++){
+    const idx = (j + k) & 1;      // (j+k) mod 2
+    if (A[idx] < B[idx]) return -1;
+    if (A[idx] > B[idx]) return  1;
+  }
+  return 0;                       // sólo ocurre si idénticos
+}
 
 
 
@@ -171,55 +192,51 @@ async _buscarPadre(x,y){
 
 /* ───── mínimo / máximo *reales* con circunf. naranja ── */
 
-/* ─ mínimo REAL del sub-árbol `n` en el eje = «eje» ─ */
+/* ─ mínimo real en eje = «eje» ─ */
 async _minReal(n, eje){
-  if (!n) return null;
+  if(!n) return null;
+  const cur = n.depth & 1;
 
-  const disc = n.depth & 1;          // eje que discrimina este nodo
-  await this._circNaranja(n, eje);   // circunf. naranja eje fijo
+  /* ① halo naranja en cada nodo visitado */
+  haloOrangeRing(n.id, eje);
+  await this._pausa();                       // pausa breve
 
-  /* ─ Caso 1: el nodo discrimina por el mismo eje ───── */
-  if (disc === eje){
-    if (n.left) return await this._minReal(n.left, eje);
-    /* si no hay hijo izquierdo, este ES el mínimo */
+  /* ② si ya es el mínimo terminal → flashOrange y salir */
+  if((cur === eje && !n.left) || (cur !== eje && !n.left && !n.right)){
+    flashOrange(n.id);                       // relleno naranja
+    await this._pausa();
     return n;
   }
 
-  /* ─ Caso 2: otro eje → mínimo = min( n , min(izq) , min(der) ) ─ */
-  let best = n;
+  /* ③ continuar búsqueda recursiva */
+  if(cur === eje)           // sólo rama izquierda importa
+    return await this._minReal(n.left, eje);
 
-  const a = await this._minReal(n.left , eje);
-  const b = await this._minReal(n.right, eje);
-
-  if (a && a.point[eje] < best.point[eje]) best = a;
-  if (b && b.point[eje] < best.point[eje]) best = b;
-
-  return best;
+  const a = await this._minReal(n.left , eje),
+        b = await this._minReal(n.right, eje);
+  return (!a || (b && b.point[eje] < a.point[eje])) ? b : a;
 }
 
-/* ─ máximo REAL del sub-árbol `n` en el eje = «eje» ─ */
+/* ─ máximo real en eje = «eje» ─ */
 async _maxReal(n, eje){
-  if (!n) return null;
+  if(!n) return null;
+  const cur = n.depth & 1;
 
-  const disc = n.depth & 1;
-  await this._circNaranja(n, eje);
+  haloOrangeRing(n.id, eje);
+  await this._pausa();
 
-  /* ─ Caso 1: discrimina por el eje buscado ─────────── */
-  if (disc === eje){
-    if (n.right) return await this._maxReal(n.right, eje);
-    return n;                          // sin hijo derecho ⇒ máximo
+  if((cur === eje && !n.right) || (cur !== eje && !n.left && !n.right)){
+    flashOrange(n.id);
+    await this._pausa();
+    return n;
   }
 
-  /* ─ Caso 2: otro eje ──────────────────────────────── */
-  let best = n;
+  if(cur === eje)
+    return await this._maxReal(n.right, eje);
 
-  const a = await this._maxReal(n.left , eje);
-  const b = await this._maxReal(n.right, eje);
-
-  if (a && a.point[eje] > best.point[eje]) best = a;
-  if (b && b.point[eje] > best.point[eje]) best = b;
-
-  return best;
+  const a = await this._maxReal(n.left , eje),
+        b = await this._maxReal(n.right, eje);
+  return (!a || (b && b.point[eje] > a.point[eje])) ? b : a;
 }
 
 
@@ -348,18 +365,48 @@ async delete(ptOrX, maybeY){
     return this._findById(n.left,id) || this._findById(n.right,id);
   }
 
-    /* quickInsert (undo) */
-  quickInsert(pt){
-    this.root = this._quickInsert(this.root, pt, 0);
-    return this._lastQuick;
+  /* ═══════════════  Inserción RÁPIDA (Undo)  ═══════════════
+   — sin animación, pero con la MISMA lógica de super-key   */
+
+quickInsert(pt){
+  const P = Array.isArray(pt) ? pt.map(Number) : [];   // por si acaso
+
+  /* 0 · duplicado -> no se inserta */
+  if (this._existeSuperKey(this.root, P)) return null;
+
+  /* 1 · reconstruye el sub-árbol */
+  this._lastQuick = null;                              // ← devuelto al caller
+  this.root = this._qInsert(this.root, P, 0, null);
+
+  return this._lastQuick;                              // último nodo creado
+}
+
+/* --- versión NO animada: usa super-key y crea nodos/aristas ---------- */
+_qInsert(n, pt, depth, parentId){
+  if (!n){
+    /* crea nodo lógicamente… */
+    const k = new KDNode(pt, depth);
+    k.parentId = parentId;
+    this._lastQuick = k;
+
+    /* …y visualmente (para que aparezca al final del Undo) */
+    enqueue({action:"createNode", node:k});
+    if (parentId !== null) enqueue({action:"addEdge", from:parentId, to:k.id});
+
+    return k;
   }
-  _quickInsert(n,pt,d){
-    if(!n){ const k=new KDNode(pt,d); this._lastQuick=k; return k; }
-    const ax=d%2;
-    if(pt[ax]<n.point[ax]) n.left = this._quickInsert(n.left,pt,d+1);
-    else                   n.right= this._quickInsert(n.right,pt,d+1);
-    return n;
+
+  const j   = depth & 1;                     // eje discriminante
+  const cmp = this._cmpSuperKey(pt, n.point, j);
+
+  if (cmp < 0){          // LOSON
+    n.left  = this._qInsert(n.left , pt, depth+1, n.id);
+  }else if (cmp > 0){     // HISON
+    n.right = this._qInsert(n.right, pt, depth+1, n.id);
   }
+  /* (cmp === 0) nunca ocurre: duplicado filtrado antes */
+  return n;
+}
 }
 export function haloOrangeRing(id, eje, ms = 300){
   enqueue({action:"highlightNode", id, axis:eje});   // eje fijo
