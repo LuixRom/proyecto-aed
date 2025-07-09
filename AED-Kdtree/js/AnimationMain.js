@@ -56,21 +56,34 @@ function handle(cmd){
   switch(cmd.action){
 
     /* ── estructura del grafo ───────────────────── */
-    case "createNode":          createNode(cmd.node); updateParts(treeRef.root);                 break;
-    case "moveNode":            moveNode(cmd.id, cmd.x, cmd.y);       break;
-    case "removeNode":          removeNode(cmd.id);                   break;
-    case "addEdge":             addEdge(cmd.from, cmd.to);            break;
+    case "createNode":
+      createNode(cmd.node);
+      updateParts(treeRef.root);                 // recalcula particiones
+      break;
+
+    case "moveNode":
+      moveNode(cmd.id, cmd.x, cmd.y);
+      break;
+
+    case "removeNode":
+      removeNode(cmd.id);
+      updateParts(treeRef.root);                 // **NUEVO**
+      break;
+
+    case "addEdge":
+      addEdge(cmd.from, cmd.to);
+      break;
 
     /* reset visual completo (nodos & aristas) */
     case "clearEdges":
       clearEdges();
-      resetParts();                           // ← limpia líneas de partición
+      resetParts();                              // limpia líneas de partición
       break;
 
     /* recálculo de posiciones */
     case "reLayout":
       layoutAndEnqueueMoves(treeRef.root);
-      updateParts(treeRef.root);   // ← NUEVO
+      updateParts(treeRef.root);                 // mantiene plano actualizado
       break;
 
     /* ── highlight / halos ─────────────────────── */
@@ -83,7 +96,11 @@ function handle(cmd){
     case "movePendingNode":     movePendingNode(cmd.x, cmd.y);        break;
     case "attachDynamicEdge":   attachDynamicEdge(cmd.fromId);        break;
     case "updateDynamicEdgeTo": updateDynamicEdgeTo(cmd.x, cmd.y);    break;
-    case "finalizePendingNode": finalizePendingNode();                break;
+
+    case "finalizePendingNode":
+      finalizePendingNode();
+      updateParts(treeRef.root);                 // **NUEVO**
+      break;
 
     /* resaltado del nodo pendiente */
     case "setPendingAxis":      setPendingHighlightAxis(cmd.axis);    break;
@@ -116,8 +133,6 @@ ctx.textBaseline= "middle";
 const plane  = document.getElementById("plane").getContext("2d");
 setViewportSize( plane.canvas.width, plane.canvas.height );
 
-
-
 /* Flag para mostrar / ocultar particiones */
 let showParts = false;     // comienza oculto
 
@@ -127,8 +142,8 @@ function loop(){
 
   /* limpia y (opcionalmente) pinta particiones en el canvas derecho */
   plane.clearRect(0,0,plane.canvas.width,plane.canvas.height);
+  if (showParts) drawParts(plane);      // líneas de partición
 
-  if (showParts) drawParts(plane);      // ← líneas de partición
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
@@ -136,11 +151,10 @@ requestAnimationFrame(loop);
 /* ═════════ Helper público para el botón toggle ═════════ */
 export function togglePartitions(){
   showParts = !showParts;
-
   if (showParts){
-    updateParts(treeRef.root);        // calcula las líneas la 1ª vez
+    updateParts(treeRef.root);          // calcula las líneas la 1ª vez
   }else{
-    resetParts();                     // borra las líneas al ocultar
+    resetParts();                       // borra las líneas al ocultar
   }
 }
 
