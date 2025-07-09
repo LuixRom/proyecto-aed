@@ -5,7 +5,7 @@ export default class KDNode {
     this.right = null;
     this.depth = depth;
     this.id = KDNode._nextId++;
-    this.parentId = null; // 🔧 usado solo para animar borde dinámico
+    this.parentId = null; 
   }
 }
 KDNode._nextId = 0;
