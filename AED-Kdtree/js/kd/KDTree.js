@@ -221,42 +221,43 @@ async _buscarPadre(x, y){
   return { padre, nodo: cur };
 }
 
-/* ════════════════  mínimo REAL en el eje «eje»  ══════════════════════════════ */
-async _minReal(n, eje){
+/* ═════════════  M Í N I M O   R E A L  ═════════════ */
+async _minReal(n, eje, pintar = true){
   if (!n) return null;
 
-  const disc = n.depth & 1;           // eje discriminante del nodo
-  haloOrangeRing(n.id, eje);          // halo naranja
+  const disc = n.depth & 1;
+  haloOrangeRing(n.id, eje);        // circunferencia
   await this._pausa();
 
-  /* ─ caso 1: discrimina por ese eje → sólo sub-árbol izquierdo ─ */
+  /* ─ caso: discrimina por el eje buscado → sólo rama izquierda ─ */
   if (disc === eje){
-    if (!n.left){
-      flashOrange(n.id);              // se alcanzó el mínimo
+    const cand = n.left
+               ? await this._minReal(n.left, eje, pintar)
+               : n;
+    if (pintar && cand) {           // ¡único flash!
+      flashOrange(cand.id);
       await this._pausa();
-      return n;
     }
-    return await this._minReal(n.left, eje);
+    return cand;
   }
 
-  /* ─ caso 2: otro eje → mínimo = arg-min{ n , min(izq) , min(der) } ─ */
-  const izq  = await this._minReal(n.left , eje);
-  const der  = await this._minReal(n.right, eje);
+  /* ─ caso: otro eje → elegir mínimo entre las tres opciones ─ */
+  const izq = await this._minReal(n.left , eje, false);
+  const der = await this._minReal(n.right, eje, false);
 
   let best = n;
   if (izq && this._cmp1D(izq.point, best.point, eje) < 0) best = izq;
   if (der && this._cmp1D(der.point, best.point, eje) < 0) best = der;
 
-  /* si el mejor es el nodo actual, aún no se ha pintado en sólido */
-  if (best === n){
-    flashOrange(n.id);
+  if (pintar && best){              // se pinta SÓLO una vez
+    flashOrange(best.id);
     await this._pausa();
   }
   return best;
 }
 
-/* ════════════════  máximo REAL en el eje «eje»  ══════════════════════════════ */
-async _maxReal(n, eje){
+/* ═════════════  M Á X I M O   R E A L  ═════════════ */
+async _maxReal(n, eje, pintar = true){
   if (!n) return null;
 
   const disc = n.depth & 1;
@@ -264,23 +265,25 @@ async _maxReal(n, eje){
   await this._pausa();
 
   if (disc === eje){
-    if (!n.right){
-      flashOrange(n.id);
+    const cand = n.right
+               ? await this._maxReal(n.right, eje, pintar)
+               : n;
+    if (pintar && cand){
+      flashOrange(cand.id);
       await this._pausa();
-      return n;
     }
-    return await this._maxReal(n.right, eje);
+    return cand;
   }
 
-  const izq  = await this._maxReal(n.left , eje);
-  const der  = await this._maxReal(n.right, eje);
+  const izq = await this._maxReal(n.left , eje, false);
+  const der = await this._maxReal(n.right, eje, false);
 
   let best = n;
   if (izq && this._cmp1D(izq.point, best.point, eje) > 0) best = izq;
   if (der && this._cmp1D(der.point, best.point, eje) > 0) best = der;
 
-  if (best === n){
-    flashOrange(n.id);
+  if (pintar && best){
+    flashOrange(best.id);
     await this._pausa();
   }
   return best;
