@@ -1,12 +1,6 @@
-/* KD-Tree 2-D con animación completa
-   – Inserción   (idéntica a la versión buena)
-   – Eliminación (animada según la secuencia descrita)
-   – quickInsert (para “Undo”)
-*/
 import { enqueue, getAnimationSpeed } from "../AnimationMain.js";
 import { enqueueTask }                     from "../AnimationMain.js";
 import {
-  /* mapa visual + helpers --------------------------------------------- */
   nodes,
   flashOnly,        // destello rojo     (NO borra)
   flashOrange,      // destello naranja  (candidato)
@@ -22,33 +16,26 @@ export class KDTree {
   constructor(){ this.root = null; }
 
 
-
-  /* ═══════════════════════ INSERCIÓN COMPLETA ═══════════════════════ */
 async insert(pt){
-  /* 0 · normaliza entrada y verifica formato ------------------------- */
   if (!Array.isArray(pt) || pt.length !== 2){
     enqueue({action:"log", msg:"• Formato de punto incorrecto"}); return;
   }
   const P = pt.map(Number);
 
-  /* 1 · duplicado global con super-key -------------------------------- */
   if (this._existeSuperKey(this.root, P)){
     enqueue({action:"log", msg:"• Punto duplicado — inserción ignorada"});
     enqueue({action:"discardPendingNode"});
     return;
   }
 
-  /* 2 · crea nodo “pendiente” azul ----------------------------------- */
   const pendingId = KDNode._nextId;
   enqueue({action:"log", msg:"────────────"});
   enqueue({action:"log", msg:`Insertando punto (${P})`});
   enqueue({action:"createPendingNode", point:P, id:pendingId});
 
-  /* 3 · inserción recursiva con super-key ---------------------------- */
   this.root = await this._insert(this.root, P, 0, null);
   enqueue({action:"reLayout"});
 
-  /* 4 · anima la “caída” del nodo azul ------------------------------- */
   let n=null;
   for(let i=0;i<50;i++){
     n = this._findById(this.root, pendingId);
@@ -69,18 +56,16 @@ async insert(pt){
   setTimeout(()=>enqueue({action:"reLayout"}),200);
 }
 
-/* ───── inserción recursiva **con super-key** en cada nivel ───── */
 async _insert(node, pt, depth, parentId){
   if(!node){
     enqueue({action:"log", msg:`  └─ Subárbol vacío → se crea nodo (${pt})`});
     const n = new KDNode(pt, depth); n.parentId = parentId; return n;
   }
 
-  /* 1 · compara super-key Sⱼ ---------------------------------------- */
   const j   = depth & 1;                       // eje discriminante
   const cmp = this._cmpSuperKey(pt, node.point, j);
 
-  /* 2 · animación de comparación (muestra sólo eje j) --------------- */
+
   enqueue({action:"setVisitedNode", id:node.id});
   enqueue({action:"highlightNode" , id:node.id, axis:j});
   enqueue({action:"setPendingAxis", axis:j});
@@ -91,7 +76,6 @@ async _insert(node, pt, depth, parentId){
   enqueue({action:"setVisitedNode",  id:null});
   enqueue({action:"clearPendingAxis"});
 
-  /* 3 · decisión según cmp ------------------------------------------ */
   if (cmp === 0){                               // duplicado exacto
     enqueue({action:"log", msg:"• Punto duplicado — inserción ignorada"});
     enqueue({action:"discardPendingNode"});
@@ -107,7 +91,6 @@ async _insert(node, pt, depth, parentId){
   return node;
 }
 
-/* ───── detección de duplicados con super-key ------------------------ */
 _existeSuperKey(n, P){
   while(n){
     const cmp = this._cmpSuperKey(P, n.point, n.depth & 1);
@@ -117,12 +100,9 @@ _existeSuperKey(n, P){
   return false;
 }
 
-/* ───── comparación de super-keys Sⱼ(A) vs Sⱼ(B)  (-1 / 0 / 1) ------ */
 _cmpSuperKey(A, B, j){
-  /* igualdad total ➜ 0 */
   if (A[0] === B[0] && A[1] === B[1]) return 0;
 
-  /* (k = 2)  ⇒  Sⱼ = Kⱼ Kⱼ₊₁  (cíclico) */
   for (let k=0;k<2;k++){
     const idx = (j + k) & 1;      // (j+k) mod 2
     if (A[idx] < B[idx]) return -1;
@@ -132,26 +112,17 @@ _cmpSuperKey(A, B, j){
 }
 
 
-/* ════════════════  helper: compara en 1 eje usando la super-key  ══════════════
-   Devuelve −1  si a < b         (según eje)
-             0   si iguales
-             1   si a > b                                                         */
+                                                       
 _cmp1D(a, b, eje){
   if (a[eje] < b[eje]) return -1;
   if (a[eje] > b[eje]) return  1;
-  /* empate ⇒ mirar la otra coordenada (cíclico) */
   const otro = eje ^ 1;              // 0↔1
   if (a[otro] < b[otro]) return -1;
   if (a[otro] > b[otro]) return  1;
-  return 0;                          // puntos idénticos
+  return 0;                          
 }
 
 
-
-
-  /* ═════════════════════  B O R R A R  ═════════════════════ */
-
-/* ───── helpers internos (privados) ─────────────────── */
 _pausa(f=1){                     // delay proporcional a la velocidad global
   return new Promise(r=>setTimeout(r, getAnimationSpeed()*0.3*f));
 }
@@ -162,23 +133,18 @@ async _circVisita(n,eje){        // verde-azul (sólo en _buscarPadre)
   enqueue({action:"unhighlightNode", id:n.id});
   enqueue({action:"setVisitedNode",  id:null});
 }
-async _circNaranja(n,eje){       // circunferencia “naranja” eje-fijo
+async _circNaranja(n,eje){       
   enqueue({action:"highlightNode", id:n.id, axis:eje});
   flashOrange(n.id, getAnimationSpeed()*0.3);
   await this._pausa();
 }
 
 
-
-
-
-/* ───── SUPER-KEY   left / right  (“LOSON / HISON”) ───── */
 _lado(padre, hijo){
   const j   = padre.depth & 1;                 // eje discriminante del padre
   return (this._cmpSuperKey(hijo.point, padre.point, j) < 0) ? "left" : "right";
 }
 
-/* ───── desplazamiento lateral con animación ─────────── */
 async _deslizar(id, destino, dx){
   const n = nodes.get(id); if(!n) return;
   const x0=n.x, y0=n.y, x1=destino._finalX+dx, y1=destino._finalY;
@@ -191,8 +157,6 @@ async _deslizar(id, destino, dx){
   }
 }
 
-
-/* ───── BUSCAR nodo + padre   CON SUPER-KEY ───────────── */
 async _buscarPadre(x, y){
   const P = [ Number(x), Number(y) ];
 
@@ -201,16 +165,14 @@ async _buscarPadre(x, y){
       depth = 0;
 
   while(cur){
-    /* animación de visita (verde-azul) */
+
     await this._circVisita(cur, depth & 1);
 
-    /* ¿lo hemos encontrado? */
     if (cur.point[0] === P[0] && cur.point[1] === P[1]){
       flashOrange(cur.id);                     // candidato naranja
       break;
     }
 
-    /* decide LOSON / HISON con la super-key Sⱼ */
     const j   = depth & 1;                     // eje actual
     const dir = this._cmpSuperKey(P, cur.point, j) < 0 ? "left" : "right";
 
@@ -221,7 +183,6 @@ async _buscarPadre(x, y){
   return { padre, nodo: cur };
 }
 
-/* ════════════════  mínimo REAL en el eje «eje»  ══════════════════════════════ */
 async _minReal(n, eje){
   if (!n) return null;
 
@@ -229,7 +190,6 @@ async _minReal(n, eje){
   haloOrangeRing(n.id, eje);          // halo naranja
   await this._pausa();
 
-  /* ─ caso 1: discrimina por ese eje → sólo sub-árbol izquierdo ─ */
   if (disc === eje){
     if (!n.left){
       flashOrange(n.id);              // se alcanzó el mínimo
@@ -239,7 +199,6 @@ async _minReal(n, eje){
     return await this._minReal(n.left, eje);
   }
 
-  /* ─ caso 2: otro eje → mínimo = arg-min{ n , min(izq) , min(der) } ─ */
   const izq  = await this._minReal(n.left , eje);
   const der  = await this._minReal(n.right, eje);
 
@@ -247,7 +206,6 @@ async _minReal(n, eje){
   if (izq && this._cmp1D(izq.point, best.point, eje) < 0) best = izq;
   if (der && this._cmp1D(der.point, best.point, eje) < 0) best = der;
 
-  /* si el mejor es el nodo actual, aún no se ha pintado en sólido */
   if (best === n){
     flashOrange(n.id);
     await this._pausa();
@@ -255,7 +213,6 @@ async _minReal(n, eje){
   return best;
 }
 
-/* ════════════════  máximo REAL en el eje «eje»  ══════════════════════════════ */
 async _maxReal(n, eje){
   if (!n) return null;
 
@@ -287,8 +244,7 @@ async _maxReal(n, eje){
 }
 
 
-/* ───── liberar sucesor (pasos 1-4) ──────────────────── */
-async _liberar(P){               // devuelve nodo sustituto o null
+async _liberar(P){               
   if(!P.left && !P.right) return null;      // hoja
 
   const eje=P.depth&1, usarDer=!!P.right;
@@ -297,33 +253,30 @@ async _liberar(P){               // devuelve nodo sustituto o null
 
   flashOrange(Q.id); await this._pausa();
 
-  /* localizar padre de Q sin animar */
+
   let padreQ=P[usarDer?"right":"left"], prev=P;
   while(padreQ && padreQ!==Q){ prev=padreQ; padreQ=usarDer?padreQ.left:padreQ.right; }
   padreQ=prev===Q?null:prev;                // null si Q es hijo directo de P
 
   const rep=await this._liberar(Q);         // recursión profunda
 
-  /* conectar rep → padreQ, quitar Q → padreQ */
+
   if(padreQ){
     const lado=this._lado(padreQ,Q);
     if(rep){ connectIfMissing(padreQ.id,rep.id); await this._pausa(0.5);}
     removeEdge(padreQ.id,Q.id); padreQ[lado]=rep;
   }
 
-  /* quitar aristas de Q → hijos */
   if(Q.left ) removeEdge(Q.id,Q.left.id );
   if(Q.right) removeEdge(Q.id,Q.right.id);
   detachNode(Q.id); flashOnly(Q.id); await this._pausa();
 
-  /* mover Q al costado de P */
+
   await this._deslizar(Q.id,P,usarDer?40:-40);
 
-  /* aristas Q → hijos de P */
   if(P.left && P.left!==Q ) connectIfMissing(Q.id,P.left.id );
   if(P.right&& P.right!==Q) connectIfMissing(Q.id,P.right.id);
 
-  /* re-ligado lógico */
   Q.left  = (P.left ===Q)?null:P.left;
   Q.right = (P.right===Q)?null:P.right;
   Q.parentId=P.parentId;
@@ -332,9 +285,8 @@ async _liberar(P){               // devuelve nodo sustituto o null
   return Q;                       // sube un nivel
 }
 
-/* ───── API PÚBLICO delete(x,y) ───────────────────────── */
+
 async delete(ptOrX, maybeY){
-  /* ── admitir [x,y] o bien (x,y) ── */
   let X, Y;
   if (Array.isArray(ptOrX)){
     [X, Y] = ptOrX.map(Number);          // mismo formato que insert
@@ -358,10 +310,9 @@ async delete(ptOrX, maybeY){
     flashAndRemove(P.id); enqueue({action:"reLayout"}); return;
   }
 
-  /* parte recursiva (pasos 1-4) */
   const sucesor=await this._liberar(P);
 
-  /* conectar sucesor con el padre de P (o convertirlo en raíz) */
+
   if(padreP){
     const lado=this._lado(padreP,P);
     padreP[lado]=sucesor;
@@ -371,7 +322,6 @@ async delete(ptOrX, maybeY){
     this.root=sucesor; sucesor.parentId=null;
   }
 
-  /* quitar aristas residuales de P y borrarlo físicamente */
   if(P.left ) removeEdge(P.id,P.left.id );
   if(P.right) removeEdge(P.id,P.right.id);
   detachNode(P.id); flashAndRemove(P.id);
