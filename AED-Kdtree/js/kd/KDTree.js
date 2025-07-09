@@ -468,6 +468,66 @@ _qInsert(n, pt, depth, parentId){
 }
 
 
+/* ═════════════  O P T I M I Z E  ═════════════
+   Reconstruye el árbol usando el algoritmo de la mediana
+   y la comparación por super-key.  No hay animación por
+   inserción punto-a-punto: el árbol se crea “de golpe”.  */
+async optimize(){
+  if (!this.root) return;
+
+  /* 1. snapshot previo para Undo -------------------------- */
+  const prevPts = [];
+  (function collect(n){
+    if(!n) return;
+    prevPts.push([...n.point]);
+    collect(n.left); collect(n.right);
+  })(this.root);
+
+  /* 2. limpiar árbol y lienzos ---------------------------- */
+  this.root = null;
+  enqueue({ action:"clearEdges" });
+  nodes.clear();                          // círculos verdes
+  // las particiones NO se limpian aquí: se recalcularán luego
+
+  /* 3. construir árbol balanceado ------------------------- */
+  const build = (pts, disc) => {
+    if (!pts.length) return null;
+
+    /* ordenar por super-key respecto al discriminador actual */
+    pts.sort((a,b)=> this._cmpSuperKey(a,b,disc));
+
+    const m   = Math.floor(pts.length/2);
+    const P   = pts[m];
+    const node= new KDNode(P, disc);
+
+    node.left  = build(pts.slice(0,m)   , disc^1);
+    node.right = build(pts.slice(m+1)   , disc^1);
+
+    if(node.left ){ node.left .parentId = node.id; }
+    if(node.right){ node.right.parentId = node.id; }
+
+    /* crear nodo y aristas en el canvas sin animación */
+    enqueue({ action:"createNode", node });
+    if(node.left ) enqueue({ action:"addEdge", from:node.id, to:node.left.id  });
+    if(node.right) enqueue({ action:"addEdge", from:node.id, to:node.right.id });
+
+    return node;
+  };
+
+  /* recolecta todos los puntos actuales y construye */
+  const allPts = [];
+  prevPts.forEach(p => allPts.push(p));     // mismos puntos, orden irrelevante
+  this.root = build(allPts, 0);
+
+  /* 4. relayout + particiones + retorno snapshot ---------- */
+  enqueue({ action:"reLayout" });
+  enqueueTask(() => updateParts(this.root));   // refresca canvas 2-D
+
+  return prevPts;            // se usará para el histórico de Undo
+}
+
+
+
 
 
 

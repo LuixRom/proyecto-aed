@@ -70,6 +70,25 @@ document.getElementById("delete").addEventListener("click", async () => {
   history.push( collectPoints(tree.root) );   
 });
 
+/* OPTIMIZE  -------------------------------------------------------- */
+document.getElementById("optimize").addEventListener("click", async () => {
+  if (!tree.root) return;
+
+  /* antes de optimizar, guarda snapshot para poder volver */
+  const before = collectPoints(tree.root);
+  const snapshotPrev = structuredClone(before);
+
+  /* reconstruye */
+  const prevPoints = await tree.optimize();   // devuelve puntos pre-optimiz.
+
+  /* historial: empuja el estado OPTIMIZADO */
+  history.push( collectPoints(tree.root) );
+
+  /* y, justo antes, el estado previo (para Undo inmediato) */
+  history.splice(history.length-1, 0, snapshotPrev);
+});
+
+
 /* UNDO  */
 document.getElementById("undo").addEventListener("click", async () => {
   if (history.length < 2) return;
