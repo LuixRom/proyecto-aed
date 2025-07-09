@@ -76,8 +76,7 @@ function handle(cmd){
 
     /* reset visual completo (nodos & aristas) */
     case "clearEdges":
-      clearEdges();
-      resetParts();                              // limpia líneas de partición
+      clearEdges();                             
       break;
 
     /* recálculo de posiciones */
