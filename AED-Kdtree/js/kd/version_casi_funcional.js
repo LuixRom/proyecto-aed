@@ -1,12 +1,7 @@
-/* KD-Tree 2-D con animación completa
-   – Inserción   (idéntica a la versión buena)
-   – Eliminación (animada según la secuencia descrita)
-   – quickInsert (para “Undo”)
-*/
+
 import { enqueue, getAnimationSpeed } from "../AnimationMain.js";
 import { enqueueTask }                     from "../AnimationMain.js";
 import {
-  /* mapa visual + helpers --------------------------------------------- */
   nodes,
   flashOnly,        // destello rojo     (NO borra)
   flashOrange,      // destello naranja  (candidato)
@@ -21,24 +16,20 @@ import KDNode from "./KDNode.js";
 export class KDTree {
   constructor(){ this.root = null; }
 
-  /* ───────────── Inserción animada ───────────── */
+
     async insert(point){
       const pendingId = KDNode._nextId;
   
-      /* separador + inicio */
       enqueue({ action:"log", msg:"────────────" });
       enqueue({ action:"log",
                 msg:`Insertando punto (${point[0]}, ${point[1]})` });
   
       enqueue({ action:"createPendingNode", point, id:pendingId });
   
-      /* insertar en estructura */
       this.root = await this._insert(this.root, point, 0, null);
   
-      /* layout inicial */
       enqueue({ action:"reLayout" });
   
-      /* esperar coordenadas del nuevo nodo */
       let layoutNode=null;
       for(let i=0;i<50;i++){
         layoutNode = this._findById(this.root, pendingId);
@@ -47,11 +38,9 @@ export class KDTree {
       }
       const { _finalX:finalX, _finalY:finalY } = layoutNode;
   
-      /* arista dinámica (si no es raíz) */
       if(layoutNode.parentId!==null)
         enqueue({ action:"attachDynamicEdge", fromId:layoutNode.parentId });
   
-      /* animación */
       const steps=20;
       for(let i=0;i<=steps;i++){
         const t=i/steps;
@@ -63,14 +52,11 @@ export class KDTree {
         await new Promise(r=>setTimeout(r,getAnimationSpeed()/steps));
       }
   
-      /* integrar y layout final */
       enqueue({ action:"finalizePendingNode" });
       setTimeout(()=>enqueue({ action:"reLayout" }),200);
     }
   
-    /* ───── inserción recursiva con mensajes ───── */
     async _insert(node, point, depth, parentId){
-      /* caso hoja: crear nuevo nodo */
       if(!node){
         enqueue({ action:"log",
                   msg:`  └─ Subárbol vacío → se crea nodo (${point[0]}, ${point[1]})`});
@@ -79,7 +65,7 @@ export class KDTree {
         return n;
       }
   
-      const axis = depth % 2;         // 0 = x, 1 = y
+      const axis = depth % 2;         
       const coord = axis===0 ? "x" : "y";
   
       /* comparar */
@@ -95,7 +81,6 @@ export class KDTree {
       enqueue({ action:"setVisitedNode", id:null });
       enqueue({ action:"clearPendingAxis" });
   
-      /* decidir rama + mensaje */
       if(point[axis] < node.point[axis]){
         enqueue({ action:"log",
                   msg:`    ↳ ${point[axis]} < ${node.point[axis]} → bajar IZQUIERDA`});
@@ -112,9 +97,6 @@ export class KDTree {
 
 
 
-  /* ═════════════════════  B O R R A R  ═════════════════════ */
-
-/* ───── helpers internos (privados) ─────────────────── */
 _pausa(f=1){                     // delay proporcional a la velocidad global
   return new Promise(r=>setTimeout(r, getAnimationSpeed()*0.3*f));
 }
@@ -125,22 +107,17 @@ async _circVisita(n,eje){        // verde-azul (sólo en _buscarPadre)
   enqueue({action:"unhighlightNode", id:n.id});
   enqueue({action:"setVisitedNode",  id:null});
 }
-async _circNaranja(n,eje){       // circunferencia “naranja” eje-fijo
+async _circNaranja(n,eje){       
   enqueue({action:"highlightNode", id:n.id, axis:eje});
   flashOrange(n.id, getAnimationSpeed()*0.3);
   await this._pausa();
 }
 
 
-
-
-
-/* ───── halo padre-hijo (“left” | “right”) ───────────── */
 _lado(padre,hijo){
   return (hijo.point[padre.depth&1] < padre.point[padre.depth&1]) ?"left":"right";
 }
 
-/* ───── desplazamiento lateral con animación ─────────── */
 async _deslizar(id, destino, dx){
   const n = nodes.get(id); if(!n) return;
   const x0=n.x, y0=n.y, x1=destino._finalX+dx, y1=destino._finalY;
@@ -153,8 +130,6 @@ async _deslizar(id, destino, dx){
   }
 }
 
-/* ───── BUSCAR padre + visita VA ─────────────────────── */
-/* ---------- BUSCAR nodo + padre (sin halo naranja) -------- */
 async _buscarPadre(x, y){
   let padre = null,
       cur   = this.root,
@@ -174,24 +149,17 @@ async _buscarPadre(x, y){
   return { padre, nodo: cur };
 }
 
-
-/* ───── mínimo / máximo *reales* con circunf. naranja ── */
-
-/* ─ mínimo REAL del sub-árbol `n` en el eje = «eje» ─ */
 async _minReal(n, eje){
   if (!n) return null;
 
   const disc = n.depth & 1;          // eje que discrimina este nodo
   await this._circNaranja(n, eje);   // circunf. naranja eje fijo
 
-  /* ─ Caso 1: el nodo discrimina por el mismo eje ───── */
   if (disc === eje){
     if (n.left) return await this._minReal(n.left, eje);
-    /* si no hay hijo izquierdo, este ES el mínimo */
     return n;
   }
 
-  /* ─ Caso 2: otro eje → mínimo = min( n , min(izq) , min(der) ) ─ */
   let best = n;
 
   const a = await this._minReal(n.left , eje);
@@ -203,20 +171,17 @@ async _minReal(n, eje){
   return best;
 }
 
-/* ─ máximo REAL del sub-árbol `n` en el eje = «eje» ─ */
 async _maxReal(n, eje){
   if (!n) return null;
 
   const disc = n.depth & 1;
   await this._circNaranja(n, eje);
 
-  /* ─ Caso 1: discrimina por el eje buscado ─────────── */
   if (disc === eje){
     if (n.right) return await this._maxReal(n.right, eje);
     return n;                          // sin hijo derecho ⇒ máximo
   }
 
-  /* ─ Caso 2: otro eje ──────────────────────────────── */
   let best = n;
 
   const a = await this._maxReal(n.left , eje);
@@ -228,14 +193,11 @@ async _maxReal(n, eje){
   return best;
 }
 
-
-/* ───── liberar sucesor (pasos 1-4) ──────────────────── */
-/* --------------- liberar(Q) → devuelve sustituto ------------- */
 async _liberar(P){
   if (!P.left && !P.right) return null;        // era hoja
 
   const eje   = P.depth & 1;                  // eje de P
-  const usarD = !!P.right;                    // ¿buscamos min der?
+  const usarD = !!P.right;                    
 
   const Q = usarD ?
             await this._minReal(P.right, eje) :
@@ -243,7 +205,6 @@ async _liberar(P){
 
   flashOrange(Q.id);  await this._pausa();
 
-  /* padre de Q (sin animar) */
   let padreQ = usarD ? P.right : P.left, prev = P;
   while (padreQ && padreQ !== Q){
     prev   = padreQ;
@@ -251,14 +212,12 @@ async _liberar(P){
   }
   padreQ = (prev === Q) ? null : prev;
 
-  /* 1· desconectar Q de su padre ---------------------------- */
   if (padreQ){
     const lado = this._lado(padreQ, Q);
     padreQ[lado] = null;
     removeEdge(padreQ.id, Q.id);
   }
 
-  /* 2· recusivamente “liberar” los hijos de Q --------------- */
   const rep = await this._liberar(Q);         // suele ser null
   if (padreQ && rep){
     const lado = this._lado(padreQ, Q);
@@ -268,15 +227,13 @@ async _liberar(P){
     await this._pausa(0.5);
   }
 
-  /* 3· borrar aristas antiguas de Q → hijos ----------------- */
+
   if (Q.left ) removeEdge(Q.id, Q.left.id );
   if (Q.right) removeEdge(Q.id, Q.right.id);
   detachNode(Q.id);       // quita TODAS las aristas de Q en el canvas
 
-  /* 4· animar desplazamiento lateral ------------------------ */
   await this._deslizar(Q.id, P, usarD ? 40 : -40);
 
-  /* 5· religar Q en la posición de P ------------------------ */
   Q.left  = P.left;
   if (Q.left)  { Q.left.parentId  = Q.id; connectIfMissing(Q.id, Q.left.id ); }
 
@@ -285,16 +242,14 @@ async _liberar(P){
 
   Q.parentId = P.parentId;
 
-  /* 6· dejar P “huérfano” y colorearlo en rojo -------------- */
+
   P.left = P.right = null;
   flashOnly(P.id);   await this._pausa();
 
   return Q;   // se coloca en el lugar de P
 }
 
-/* ───── API PÚBLICO delete(x,y) ───────────────────────── */
 async delete(ptOrX, maybeY){
-  /* ── admitir [x,y] o bien (x,y) ── */
   let X, Y;
   if (Array.isArray(ptOrX)){
     [X, Y] = ptOrX.map(Number);          // mismo formato que insert
@@ -308,20 +263,18 @@ async delete(ptOrX, maybeY){
   const {padre:padreP,nodo:P}=await this._buscarPadre(X,Y);
   if(!P){ enqueue({action:"log",msg:"• Punto no encontrado"}); return; }
 
-  /* caso hoja trivial */
+
   if(!P.left && !P.right){
     if (padreP){
       padreP[this._lado(padreP, P)] = null;   // desconecta del padre
     } else {
-      this.root = null;                       // ← IMPORTANTE
+      this.root = null;                       
     }
     flashAndRemove(P.id); enqueue({action:"reLayout"}); return;
   }
 
-  /* parte recursiva (pasos 1-4) */
   const sucesor=await this._liberar(P);
 
-  /* conectar sucesor con el padre de P (o convertirlo en raíz) */
   if(padreP){
     const lado=this._lado(padreP,P);
     padreP[lado]=sucesor;
@@ -331,7 +284,6 @@ async delete(ptOrX, maybeY){
     this.root=sucesor; sucesor.parentId=null;
   }
 
-  /* quitar aristas residuales de P y borrarlo físicamente */
   if(P.left ) removeEdge(P.id,P.left.id );
   if(P.right) removeEdge(P.id,P.right.id);
   detachNode(P.id); flashAndRemove(P.id);
