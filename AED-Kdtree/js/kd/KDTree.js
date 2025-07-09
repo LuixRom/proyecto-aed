@@ -1,12 +1,8 @@
-/* KD-Tree 2-D con animación completa
-   – Inserción   (idéntica a la versión buena)
-   – Eliminación (animada según la secuencia descrita)
-   – quickInsert (para “Undo”)
-*/
+
 import { enqueue, getAnimationSpeed } from "../AnimationMain.js";
 import { enqueueTask }                     from "../AnimationMain.js";
 import {
-  /* mapa visual + helpers --------------------------------------------- */
+
   nodes,
   flashOnly,        // destello rojo     (NO borra)
   flashOrange,      // destello naranja  (candidato)
@@ -18,7 +14,7 @@ import {
 
 import KDNode from "./KDNode.js";
 
-//  NUEVO  – dibujar / recalcular particiones 2-D
+
 import { updateParts } from "../PartitionManager.js";
 
 export class KDTree {
@@ -26,32 +22,30 @@ export class KDTree {
 
 
 
-  /* ═══════════════════════ INSERCIÓN COMPLETA ═══════════════════════ */
 async insert(pt){
-  /* 0 · normaliza entrada y verifica formato ------------------------- */
+
   if (!Array.isArray(pt) || pt.length !== 2){
     enqueue({action:"log", msg:"• Formato de punto incorrecto"}); return;
   }
   const P = pt.map(Number);
 
-  /* 1 · duplicado global con super-key -------------------------------- */
   if (this._existeSuperKey(this.root, P)){
     enqueue({action:"log", msg:"• Punto duplicado — inserción ignorada"});
     enqueue({action:"discardPendingNode"});
     return;
   }
 
-  /* 2 · crea nodo “pendiente” azul ----------------------------------- */
+
   const pendingId = KDNode._nextId;
   enqueue({action:"log", msg:"────────────"});
   enqueue({action:"log", msg:`Insertando punto (${P})`});
   enqueue({action:"createPendingNode", point:P, id:pendingId});
 
-  /* 3 · inserción recursiva con super-key ---------------------------- */
+
   this.root = await this._insert(this.root, P, 0, null);
   enqueue({action:"reLayout"});
 
-  /* 4 · anima la “caída” del nodo azul ------------------------------- */
+
   let n=null;
   for(let i=0;i<50;i++){
     n = this._findById(this.root, pendingId);
@@ -74,18 +68,17 @@ async insert(pt){
   enqueueTask(() => updateParts(this.root)); 
 }
 
-/* ───── inserción recursiva **con super-key** en cada nivel ───── */
+
 async _insert(node, pt, depth, parentId){
   if(!node){
     enqueue({action:"log", msg:`  └─ Subárbol vacío → se crea nodo (${pt})`});
     const n = new KDNode(pt, depth); n.parentId = parentId; return n;
   }
 
-  /* 1 · compara super-key Sⱼ ---------------------------------------- */
-  const j   = depth & 1;                       // eje discriminante
+
+  const j   = depth & 1;                      
   const cmp = this._cmpSuperKey(pt, node.point, j);
 
-  /* 2 · animación de comparación (muestra sólo eje j) --------------- */
   enqueue({action:"setVisitedNode", id:node.id});
   enqueue({action:"highlightNode" , id:node.id, axis:j});
   enqueue({action:"setPendingAxis", axis:j});
@@ -96,8 +89,8 @@ async _insert(node, pt, depth, parentId){
   enqueue({action:"setVisitedNode",  id:null});
   enqueue({action:"clearPendingAxis"});
 
-  /* 3 · decisión según cmp ------------------------------------------ */
-  if (cmp === 0){                               // duplicado exacto
+
+  if (cmp === 0){                               
     enqueue({action:"log", msg:"• Punto duplicado — inserción ignorada"});
     enqueue({action:"discardPendingNode"});
     return node;
@@ -112,7 +105,7 @@ async _insert(node, pt, depth, parentId){
   return node;
 }
 
-/* ───── detección de duplicados con super-key ------------------------ */
+
 _existeSuperKey(n, P){
   while(n){
     const cmp = this._cmpSuperKey(P, n.point, n.depth & 1);
@@ -122,33 +115,25 @@ _existeSuperKey(n, P){
   return false;
 }
 
-/* ───── comparación de super-keys Sⱼ(A) vs Sⱼ(B)  (-1 / 0 / 1) ------ */
+
 _cmpSuperKey(A, B, j){
-  /* igualdad total ➜ 0 */
   if (A[0] === B[0] && A[1] === B[1]) return 0;
 
-  /* (k = 2)  ⇒  Sⱼ = Kⱼ Kⱼ₊₁  (cíclico) */
   for (let k=0;k<2;k++){
-    const idx = (j + k) & 1;      // (j+k) mod 2
+    const idx = (j + k) & 1;      
     if (A[idx] < B[idx]) return -1;
     if (A[idx] > B[idx]) return  1;
   }
-  return 0;                       // sólo ocurre si idénticos
+  return 0;                       
 }
-
-
-/* ════════════════  helper: compara en 1 eje usando la super-key  ══════════════
-   Devuelve −1  si a < b         (según eje)
-             0   si iguales
-             1   si a > b                                                         */
+                                                     
 _cmp1D(a, b, eje){
   if (a[eje] < b[eje]) return -1;
   if (a[eje] > b[eje]) return  1;
-  /* empate ⇒ mirar la otra coordenada (cíclico) */
-  const otro = eje ^ 1;              // 0↔1
+  const otro = eje ^ 1;              
   if (a[otro] < b[otro]) return -1;
   if (a[otro] > b[otro]) return  1;
-  return 0;                          // puntos idénticos
+  return 0;                          
 }
 
 
@@ -177,13 +162,13 @@ async _circNaranja(n,eje){       // circunferencia “naranja” eje-fijo
 
 
 
-/* ───── SUPER-KEY   left / right  (“LOSON / HISON”) ───── */
+
 _lado(padre, hijo){
-  const j   = padre.depth & 1;                 // eje discriminante del padre
+  const j   = padre.depth & 1;                 
   return (this._cmpSuperKey(hijo.point, padre.point, j) < 0) ? "left" : "right";
 }
 
-/* ───── desplazamiento lateral con animación ─────────── */
+
 async _deslizar(id, destino, dx){
   const n = nodes.get(id); if(!n) return;
   const x0=n.x, y0=n.y, x1=destino._finalX+dx, y1=destino._finalY;
@@ -197,7 +182,7 @@ async _deslizar(id, destino, dx){
 }
 
 
-/* ───── BUSCAR nodo + padre   CON SUPER-KEY ───────────── */
+
 async _buscarPadre(x, y){
   const P = [ Number(x), Number(y) ];
 
@@ -206,17 +191,17 @@ async _buscarPadre(x, y){
       depth = 0;
 
   while(cur){
-    /* animación de visita (verde-azul) */
+
     await this._circVisita(cur, depth & 1);
 
-    /* ¿lo hemos encontrado? */
+
     if (cur.point[0] === P[0] && cur.point[1] === P[1]){
-      flashOrange(cur.id);                     // candidato naranja
+      flashOrange(cur.id);                    
       break;
     }
 
-    /* decide LOSON / HISON con la super-key Sⱼ */
-    const j   = depth & 1;                     // eje actual
+
+    const j   = depth & 1;                     
     const dir = this._cmpSuperKey(P, cur.point, j) < 0 ? "left" : "right";
 
     padre = cur;
@@ -226,15 +211,15 @@ async _buscarPadre(x, y){
   return { padre, nodo: cur };
 }
 
-/* ═════════════  M Í N I M O   R E A L  ═════════════ */
+
 async _minReal(n, eje, pintar = true){
   if (!n) return null;
 
   const disc = n.depth & 1;
-  haloOrangeRing(n.id, eje);        // circunferencia
+  haloOrangeRing(n.id, eje);        
   await this._pausa();
 
-  /* ─ caso: discrimina por el eje buscado → sólo rama izquierda ─ */
+
   if (disc === eje){
     const cand = n.left
                ? await this._minReal(n.left, eje, pintar)
@@ -246,7 +231,7 @@ async _minReal(n, eje, pintar = true){
     return cand;
   }
 
-  /* ─ caso: otro eje → elegir mínimo entre las tres opciones ─ */
+
   const izq = await this._minReal(n.left , eje, false);
   const der = await this._minReal(n.right, eje, false);
 
@@ -261,7 +246,7 @@ async _minReal(n, eje, pintar = true){
   return best;
 }
 
-/* ═════════════  M Á X I M O   R E A L  ═════════════ */
+
 async _maxReal(n, eje, pintar = true){
   if (!n) return null;
 
@@ -295,7 +280,7 @@ async _maxReal(n, eje, pintar = true){
 }
 
 
-/* ───── liberar sucesor (pasos 1-4) ──────────────────── */
+
 async _liberar(P){               // devuelve nodo sustituto o null
   if(!P.left && !P.right) return null;      // hoja
 
@@ -312,26 +297,26 @@ async _liberar(P){               // devuelve nodo sustituto o null
 
   const rep=await this._liberar(Q);         // recursión profunda
 
-  /* conectar rep → padreQ, quitar Q → padreQ */
+
   if(padreQ){
     const lado=this._lado(padreQ,Q);
     if(rep){ connectIfMissing(padreQ.id,rep.id); await this._pausa(0.5);}
     removeEdge(padreQ.id,Q.id); padreQ[lado]=rep;
   }
 
-  /* quitar aristas de Q → hijos */
+
   if(Q.left ) removeEdge(Q.id,Q.left.id );
   if(Q.right) removeEdge(Q.id,Q.right.id);
   detachNode(Q.id); flashOnly(Q.id); await this._pausa();
 
-  /* mover Q al costado de P */
+
   await this._deslizar(Q.id,P,usarDer?40:-40);
 
-  /* aristas Q → hijos de P */
+
   if(P.left && P.left!==Q ) connectIfMissing(Q.id,P.left.id );
   if(P.right&& P.right!==Q) connectIfMissing(Q.id,P.right.id);
 
-  /* re-ligado lógico */
+
   Q.left  = (P.left ===Q)?null:P.left;
   Q.right = (P.right===Q)?null:P.right;
   Q.parentId=P.parentId;
@@ -340,9 +325,9 @@ async _liberar(P){               // devuelve nodo sustituto o null
   return Q;                       // sube un nivel
 }
 
-/* ───── delete(x,y) ───────────────────────── */
+
 async delete(ptOrX, maybeY){
-  /* ── admitir [x,y] o bien (x,y) ── */
+
   let X, Y;
   if (Array.isArray(ptOrX)){
     [X, Y] = ptOrX.map(Number);          // mismo formato que insert
@@ -356,20 +341,20 @@ async delete(ptOrX, maybeY){
   const {padre:padreP,nodo:P}=await this._buscarPadre(X,Y);
   if(!P){ enqueue({action:"log",msg:"• Punto no encontrado"}); return; }
 
-  /* caso hoja trivial */
+
   if(!P.left && !P.right){
     if (padreP){
       padreP[this._lado(padreP, P)] = null;   // desconecta del padre
     } else {
-      this.root = null;                       // ← IMPORTANTE
+      this.root = null;                       
     }
     flashAndRemove(P.id); enqueue({action:"reLayout"}); return;
   }
 
-  /* parte recursiva (pasos 1-4) */
+
   const sucesor=await this._liberar(P);
 
-  /* conectar sucesor con el padre de P (o convertirlo en raíz) */
+
   if(padreP){
     const lado=this._lado(padreP,P);
     padreP[lado]=sucesor;
@@ -379,14 +364,14 @@ async delete(ptOrX, maybeY){
     this.root=sucesor; sucesor.parentId=null;
   }
 
-  /* quitar aristas residuales de P y borrarlo físicamente */
+
   if(P.left ) removeEdge(P.id,P.left.id );
   if(P.right) removeEdge(P.id,P.right.id);
   detachNode(P.id); flashAndRemove(P.id);
 
   enqueue({action:"reLayout"});
-  /* ─── recalcular particiones 2-D ─── */
-  enqueueTask(() => updateParts(this.root));   //  NUEVO
+
+  enqueueTask(() => updateParts(this.root));  
 }
 
 
