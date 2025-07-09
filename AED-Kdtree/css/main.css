@@ -78,3 +78,13 @@ canvas {
   border:1px solid #555;
 }
 #log p{ margin:0; }
+
+
+
+#viewports{
+  display:flex;          /* árbol a la izquierda, plano a la derecha */
+  gap:12px;
+}
+#plane{
+  background:#111;
+}

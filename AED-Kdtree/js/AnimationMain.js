@@ -1,3 +1,9 @@
+/* AnimationMain.js
+ * =========================================================
+ *  – Dibujo de nodos, aristas y animaciones
+ *  – NUEVO: soporte para líneas de partición 2-D mostrables
+ * ========================================================= */
+
 import {
   /* nodos fijos */
   createNode, moveNode, removeNode,
@@ -9,33 +15,33 @@ import {
   createPendingNode, movePendingNode,
   attachDynamicEdge, updateDynamicEdgeTo,
   finalizePendingNode,
-  setPendingHighlightAxis,   // ← resalta coord. que se está comparando
-  clearPendingHighlight,     // ← quita ese resaltado
-  flashAndRemove,             // ← destello rojo + borrado
-  flashOnly,
-  flashOrange,
-  removeEdge,
-  detachNode,
-  connectIfMissing,
+  setPendingHighlightAxis, clearPendingHighlight,
+
+  /* efectos */
+  flashAndRemove, flashOnly, flashOrange,
+
+  /* aristas y utilidades */
+  removeEdge, detachNode, connectIfMissing,
   discardPendingNode
 } from "./ObjectManager.js";
 
 import { layoutAndEnqueueMoves } from "./Layouter.js";
+import { drawParts, resetParts, updateParts, setViewportSize } from "./PartitionManager.js";
 
-/* ═════════════ Velocidad de animación ═════════════ */
+/* ═════════ Velocidad de animación ═════════ */
 let animationSpeed = 500;
 export const setAnimationSpeed = ms => { animationSpeed = ms; };
 export const getAnimationSpeed = ()  => animationSpeed;
 
-/* ═════════════ Referencia al árbol ═════════════ */
+/* ═════════ Referencia al árbol (KDTree) ═════════ */
 let treeRef = null;
 export const setTreeRef = t => { treeRef = t; };
 
-/* ═════════════ Cola de comandos ═════════════ */
+/* ═════════ Cola de comandos (animaciones) ════════ */
 const queue = [];
 export const enqueue = cmd => queue.push(cmd);
 
-/* ═════════════ Panel de log ═════════════ */
+/* ═════════ Panel de log ═════════ */
 const logEl = document.getElementById("log");
 function appendLog(txt){
   if(!logEl) return;
@@ -45,24 +51,34 @@ function appendLog(txt){
   logEl.scrollTop = logEl.scrollHeight;   // autoscroll
 }
 
-/* ═════════════ Despachador de comandos ═════════════ */
+/* ═════════ Despachador de comandos ═════════ */
 function handle(cmd){
   switch(cmd.action){
 
-    /* estructura */
-    case "createNode":          createNode(cmd.node);                 break;
+    /* ── estructura del grafo ───────────────────── */
+    case "createNode":          createNode(cmd.node); updateParts(treeRef.root);                 break;
     case "moveNode":            moveNode(cmd.id, cmd.x, cmd.y);       break;
     case "removeNode":          removeNode(cmd.id);                   break;
     case "addEdge":             addEdge(cmd.from, cmd.to);            break;
-    case "clearEdges":          clearEdges();                         break;
-    case "reLayout":            layoutAndEnqueueMoves(treeRef.root);  break;
 
-    /* highlight / halo */
+    /* reset visual completo (nodos & aristas) */
+    case "clearEdges":
+      clearEdges();
+      resetParts();                           // ← limpia líneas de partición
+      break;
+
+    /* recálculo de posiciones */
+    case "reLayout":
+      layoutAndEnqueueMoves(treeRef.root);
+      updateParts(treeRef.root);   // ← NUEVO
+      break;
+
+    /* ── highlight / halos ─────────────────────── */
     case "setVisitedNode":      setVisitedNode(cmd.id);               break;
     case "highlightNode":       highlightNode(cmd.id, cmd.axis);      break;
     case "unhighlightNode":     unhighlightNode(cmd.id);              break;
 
-    /* pendiente + arista azul */
+    /* ── nodo pendiente + arista dinámica ──────── */
     case "createPendingNode":   createPendingNode(cmd.point, cmd.id); break;
     case "movePendingNode":     movePendingNode(cmd.x, cmd.y);        break;
     case "attachDynamicEdge":   attachDynamicEdge(cmd.fromId);        break;
@@ -73,46 +89,71 @@ function handle(cmd){
     case "setPendingAxis":      setPendingHighlightAxis(cmd.axis);    break;
     case "clearPendingAxis":    clearPendingHighlight();              break;
 
-    /* log */
+    /* ── log ───────────────────────────────────── */
     case "log":                 appendLog(cmd.msg);                   break;
 
-    /* destello rojo + borrado diferido */
+    /* ── destellos / efectos ───────────────────── */
     case "flashRemove":         flashAndRemove(cmd.id);               break;
-    case "flashOnly":          flashOnly(cmd.id);                    break;
+    case "flashOnly":           flashOnly(cmd.id);                    break;
+    case "flashOrange":         flashOrange(cmd.id);                  break;
 
+    /* ── aristas sueltas ───────────────────────── */
+    case "removeEdge":          removeEdge(cmd.from, cmd.to);         break;
+    case "detachNode":          detachNode(cmd.id);                   break;
+    case "connectEdge":         connectIfMissing(cmd.a, cmd.b);       break;
 
-    case "flashOrange":        flashOrange(cmd.id);                        break;
-    case "removeEdge":         removeEdge(cmd.from, cmd.to);               break;
-    case "detachNode":   detachNode(cmd.id);                       break;
-    case "connectEdge":  connectIfMissing(cmd.a, cmd.b);           break;
-
-    case "discardPendingNode": discardPendingNode();               break;
+    /* ── cancelar pendingNode ──────────────────── */
+    case "discardPendingNode":  discardPendingNode();                 break;
   }
 }
 
-/* ═════════════ Bucle principal de dibujo ═════════════ */
+/* ═════════ Bucle principal de dibujo ═════════ */
 const ctx = document.getElementById("board").getContext("2d");
-ctx.font = "14px Segoe UI";
+ctx.font        = "14px Segoe UI";
 ctx.textAlign   = "center";
-ctx.textBaseline = "middle";
+ctx.textBaseline= "middle";
+
+const plane  = document.getElementById("plane").getContext("2d");
+setViewportSize( plane.canvas.width, plane.canvas.height );
+
+
+
+/* Flag para mostrar / ocultar particiones */
+let showParts = false;     // comienza oculto
 
 function loop(){
   if(queue.length) handle(queue.shift());
-  drawAll(ctx);
+  drawAll(ctx);            // nodos + aristas
+
+  /* limpia y (opcionalmente) pinta particiones en el canvas derecho */
+  plane.clearRect(0,0,plane.canvas.width,plane.canvas.height);
+
+  if (showParts) drawParts(plane);      // ← líneas de partición
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
+/* ═════════ Helper público para el botón toggle ═════════ */
+export function togglePartitions(){
+  showParts = !showParts;
 
-const tasks = [];
-let running = false;
+  if (showParts){
+    updateParts(treeRef.root);        // calcula las líneas la 1ª vez
+  }else{
+    resetParts();                     // borra las líneas al ocultar
+  }
+}
+
+/* ═════════ Scheduler interno (enqueueTask) ════════════ */
+const tasks  = [];
+let   running=false;
 
 export async function enqueueTask(fn){
   tasks.push(fn);
   if(!running){
     running = true;
     while(tasks.length){
-      await tasks.shift()();   
+      await tasks.shift()();
     }
     running = false;
   }

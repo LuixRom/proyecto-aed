@@ -18,6 +18,9 @@ import {
 
 import KDNode from "./KDNode.js";
 
+//  NUEVO  – dibujar / recalcular particiones 2-D
+import { updateParts } from "../PartitionManager.js";
+
 export class KDTree {
   constructor(){ this.root = null; }
 
@@ -67,6 +70,8 @@ async insert(pt){
   }
   enqueue({action:"finalizePendingNode"});
   setTimeout(()=>enqueue({action:"reLayout"}),200);
+  /* ─── recalcular particiones 2-D ─── */
+  enqueueTask(() => updateParts(this.root)); 
 }
 
 /* ───── inserción recursiva **con super-key** en cada nivel ───── */
@@ -335,7 +340,7 @@ async _liberar(P){               // devuelve nodo sustituto o null
   return Q;                       // sube un nivel
 }
 
-/* ───── API PÚBLICO delete(x,y) ───────────────────────── */
+/* ───── delete(x,y) ───────────────────────── */
 async delete(ptOrX, maybeY){
   /* ── admitir [x,y] o bien (x,y) ── */
   let X, Y;
@@ -380,6 +385,8 @@ async delete(ptOrX, maybeY){
   detachNode(P.id); flashAndRemove(P.id);
 
   enqueue({action:"reLayout"});
+  /* ─── recalcular particiones 2-D ─── */
+  enqueueTask(() => updateParts(this.root));   //  NUEVO
 }
 
 
@@ -427,6 +434,8 @@ quickInsert(pt){
   /* 1 · reconstruye el sub-árbol */
   this._lastQuick = null;                              // ← devuelto al caller
   this.root = this._qInsert(this.root, P, 0, null);
+   // actualiza particiones al reconstruir sin animación
+  updateParts(this.root);
 
   return this._lastQuick;                              // último nodo creado
 }

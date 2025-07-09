@@ -14,6 +14,8 @@
     <button id="delete">Delete</button>
     <button id="reset" style="margin-left: 8px;">Reset</button>
     <button id="undo" style="margin-left:8px;">Undo</button>
+    <button id="toggleParts" class="btn">Partitions</button>
+
     
   </div>
 
@@ -27,7 +29,14 @@
   </div>
 
 
-  <canvas id="board" width="900" height="500"></canvas>
+  <!-- dentro de <body>, justo después del canvas original -->
+<div id="viewports">
+  <canvas id="board"   width="800" height="500"></canvas>   <!-- ya existía -->
+  <canvas id="plane"   width="800" height="500"
+          style="display:none; border:1px solid #444"></canvas>
+</div>
+
+  
   <div id="log"></div>
   <script type="module" src="js/main.js"></script>
 </body>
