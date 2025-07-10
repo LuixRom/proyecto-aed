@@ -1,13 +1,3 @@
-/* PartitionManager.js – KD-Tree 2-D
- * -------------------------------------------------------------------
- * • Alargue fijo: 36 px si un extremo toca el borde global (bbox) y
- *   no cruza otra partición.
- * • bbox se agranda un 3 % para dejar “aire” y evitar que los puntos
- *   queden pegados al borde visual.
- * • La partición de la RAÍZ (eje X → línea vertical) se dibuja SIEMPRE
- *   desde el borde superior (y=0) hasta el borde inferior del canvas
- *   (y=H), de modo que toca el marco visible del gráfico.              */
-
 const PADDING  = 20;       // margen interno para escalar
 const EXTRA    = 36;       // alargue fijo
 const BBOX_PAD = 0.03;     // 3 % de margen lógico
@@ -15,14 +5,12 @@ const BBOX_PAD = 0.03;     // 3 % de margen lógico
 let W = 800, H = 500;
 let bbox, segments = [], pixPoints = [];
 
-/* ═════════════════════ API ═════════════════════ */
 export function setViewportSize(w, h){ W = w; H = h; }
 export function resetParts(){ segments.length = 0; pixPoints.length = 0; bbox = null; }
 
 export function updateParts(root){
   resetParts(); if (!root) return;
 
-  /* 1· calcular bbox real de los puntos ---------------------------- */
   bbox = { xmin:+1e9, xmax:-1e9, ymin:+1e9, ymax:-1e9 };
   (function walk(n){
     if(!n) return;
@@ -34,36 +22,30 @@ export function updateParts(root){
     walk(n.left); walk(n.right);
   })(root);
 
-  /* 2· añadir 3 % de margen lógico -------------------------------- */
   const dx = (bbox.xmax - bbox.xmin) || 1;
   const dy = (bbox.ymax - bbox.ymin) || 1;
   bbox.xmin -= dx * BBOX_PAD;  bbox.xmax += dx * BBOX_PAD;
   bbox.ymin -= dy * BBOX_PAD;  bbox.ymax += dy * BBOX_PAD;
 
-  /* 3· construir particiones (segments) y puntos (pixPoints) ------- */
   buildSegments(root, { ...bbox }, 0);
   buildPixPoints(root);
 }
 
-/* ═══════════════════ DIBUJO ═══════════════════ */
 export function drawParts(ctx){
   if (!bbox) return;
   ctx.save(); ctx.clearRect(0, 0, W, H);
 
-  /* ejes de referencia (gris) */
   ctx.setLineDash([]); ctx.strokeStyle = "#6667"; ctx.lineWidth = 1;
   const zx = sx(0), zy = sy(0);
   ctx.beginPath();
   ctx.moveTo(zx, PADDING);   ctx.lineTo(zx, H - PADDING);
   ctx.moveTo(PADDING, zy);   ctx.lineTo(W - PADDING, zy); ctx.stroke();
 
-  /* particiones (rojo punteado) */
   ctx.setLineDash([6, 4]); ctx.strokeStyle = "#e53935"; ctx.lineWidth = 1.5;
   segments.forEach(s=>{
     ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
   });
 
-  /* puntos + etiquetas */
   ctx.setLineDash([]); ctx.fillStyle = "#4CAF50";
   pixPoints.forEach(p=>{
     ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI*2); ctx.fill();
@@ -73,7 +55,6 @@ export function drawParts(ctx){
   ctx.restore();
 }
 
-/* ═════════════════ Helpers ════════════════════ */
 function sx(x){ return PADDING + (x - bbox.xmin) / (bbox.xmax - bbox.xmin) * (W - 2*PADDING); }
 function sy(y){ return H - PADDING - (y - bbox.ymin) / (bbox.ymax - bbox.ymin) * (H - 2*PADDING); }
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
@@ -84,7 +65,6 @@ function buildPixPoints(n){
   buildPixPoints(n.left); buildPixPoints(n.right);
 }
 
-/* —— detección de cruces (para EXTENSIONES) —— */
 function crossesHoriz(x, y0, y1){
   return segments.some(s=>{
     if(s.y1 !== s.y2) return false;             // no horizontal
@@ -100,16 +80,14 @@ function crossesVert(y, x0, x1){
   });
 }
 
-/* ═════════ Particiones recursivas ═════════════ */
 function buildSegments(n, R, depth){
   if(!n) return;
-  const axis = depth & 1;              // 0 → vertical, 1 → horizontal
+  const axis = depth & 1;             
 
-  if(axis === 0){                      /* — vertical — */
+  if(axis === 0){                     
     const X = sx(n.point[0]);
     let yTop = sy(R.ymax), yBot = sy(R.ymin);
 
-    /* RAÍZ: línea T O T A L (toca 0 y H) */
     if(depth === 0){
       yTop = 0;
       yBot = H;
@@ -129,7 +107,7 @@ function buildSegments(n, R, depth){
     buildSegments(n.left , { xmin: R.xmin, xmax: n.point[0], ymin: R.ymin, ymax: R.ymax }, depth + 1);
     buildSegments(n.right, { xmin: n.point[0], xmax: R.xmax, ymin: R.ymin, ymax: R.ymax }, depth + 1);
 
-  }else{                                /* — horizontal — */
+  }else{                                
     const Y = sy(n.point[1]);
     let xL = sx(R.xmin), xR = sx(R.xmax);
 
