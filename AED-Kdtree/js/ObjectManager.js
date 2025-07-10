@@ -1,11 +1,9 @@
-/* ╔════════════════  Estado global  ════════════════╗ */
-export const nodes = new Map();   // id → {x,y,r,text,color,highlightAxis}
-let edges          = [];          // {from,to}
+export const nodes = new Map();   
+let edges          = [];         
 let pendingNode    = null;        // nodo azul que entra
 let dynamicEdge    = null;        // arista azul durante la inserción
 let visitedNodeId  = null;        // id con halo azul
 
-/* ═════════════════ CRUD de nodos fijos ═════════════ */
 export function createNode(n){
   nodes.set(n.id,{
     x:0, y:0, r:18,
@@ -15,7 +13,6 @@ export function createNode(n){
   });
 }
 
-// ——— descartar el nodo azul sin crear un nodo fijo ———
 export function discardPendingNode(){
   pendingNode = null;
   dynamicEdge = null;
@@ -41,13 +38,11 @@ export function clearCanvas(){
   visitedNodeId = null;
 }
 
-/* ═════════════════ Highlight / halo ════════════════ */
 export const setVisitedNode   = id => { visitedNodeId = id; };
 export const highlightNode    = (id,a) => { const n=nodes.get(id); if(n) n.highlightAxis=a; };
 export const unhighlightNode  = id => { const n=nodes.get(id); if(n) n.highlightAxis=null; };
 export const updateNodeText   = (id,t) => { const n=nodes.get(id); if(n) n.text = t; };
 
-/* ——— helpers de color ——— */
 function pushColor(id, newColor){
   const n = nodes.get(id); if (!n) return;
   if (!n.colorStack) n.colorStack = [];
@@ -60,12 +55,6 @@ function popColor(id){
 }
 
 
-
-
-
-
-
-/* ——— NARANJA ——— */
 export function flashOrange(id, ms = 350){
   pushColor(id, "#FF9800");
   setTimeout(() => {
@@ -75,7 +64,6 @@ export function flashOrange(id, ms = 350){
   }, ms);
 }
 
-/* ——— ROJO sin borrar ——— */
 export function flashOnly(id, ms = 300){
   pushColor(id, "#E53935");
   setTimeout(() => {
@@ -85,8 +73,6 @@ export function flashOnly(id, ms = 300){
   }, ms);
 }
 
-
-/* ——— ROJO + borrar ——— */
 export function flashAndRemove(id, ms = 300){
   pushColor(id, "#E53935");               // rojo
   setTimeout(() => {
@@ -95,30 +81,20 @@ export function flashAndRemove(id, ms = 300){
   }, ms);
 }
 
-
-/* --- NUEVO: quitar una arista concreta --- */
 export const removeEdge = (from, to) => {
   edges = edges.filter(e => !(e.from === from && e.to === to));
 };
 
-/* --- NUEVO: desconectar todas las aristas que salen/entran a un nodo --- */
 export const detachNode = id => {
   edges = edges.filter(e => e.from !== id && e.to !== id);
 };
 
-/* --- NUEVO: conectar si aún no existe la arista --- */
 export const connectIfMissing = (from, to) => {
   if (!edges.some(e => e.from === from && e.to === to))
     edges.push({from,to});
 };
 
 
-
-
-
-
-
-/* ═════════════════ Nodo pendiente + arista azul ═════ */
 export const setPendingHighlightAxis = ax =>{
   if(pendingNode) pendingNode.highlightAxis = ax;
 };
@@ -166,7 +142,6 @@ export function setFinalPosition(id,x,y){
   if(n){ n._finalX = x; n._finalY = y; }
 }
 
-/* ═════════════ Utilidad: dibujar coordenada ═════════ */
 function drawCoordinate(ctx, x, y, fullText, axis){
   if(axis === null){
     ctx.fillStyle="#fff";
@@ -178,7 +153,6 @@ function drawCoordinate(ctx, x, y, fullText, axis){
   const mid    = axis===0 ? parts[0]     : parts[1];
   const after  = axis===0 ? `,${parts[1]})` : ")";
 
-  /* cálculo de posiciones */
   const wBefore = ctx.measureText(before).width;
   const wMid    = ctx.measureText(mid).width;
   const wAfter  = ctx.measureText(after).width;
@@ -196,11 +170,9 @@ function drawCoordinate(ctx, x, y, fullText, axis){
   ctx.restore();
 }
 
-/* ═════════════ Dibujado principal ═════════════ */
 export function drawAll(ctx){
   ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
 
-  /* 1· Aristas fijas */
   ctx.strokeStyle="#4CAF50";
   ctx.lineWidth = 2;
   edges.forEach(e=>{
@@ -212,7 +184,6 @@ export function drawAll(ctx){
     ctx.stroke();
   });
 
-  /* 2· Nodos fijos */
   nodes.forEach(o=>{
     ctx.fillStyle   = o.color;
     ctx.strokeStyle = o.color;
@@ -223,7 +194,6 @@ export function drawAll(ctx){
     drawCoordinate(ctx, o.x, o.y, o.text, o.highlightAxis);
   });
 
-  /* 3· Halo azul del nodo visitado */
   if(visitedNodeId !== null){
     const n = nodes.get(visitedNodeId);
     if(n){
@@ -235,7 +205,6 @@ export function drawAll(ctx){
     }
   }
 
-  /* 4· Arista dinámica azul */
   if(dynamicEdge){
     const f = nodes.get(dynamicEdge.fromId);
     if(f){
@@ -248,7 +217,6 @@ export function drawAll(ctx){
     }
   }
 
-  /* 5· Nodo pendiente */
   if(pendingNode){
     ctx.fillStyle   = pendingNode.color;
     ctx.strokeStyle = pendingNode.color;
